@@ -620,13 +620,13 @@ dump_exe_log ()
 	    }
 
 	  fprintf (runtime.sim.fexe_log, "\n");
-	  fprintf (runtime.sim.fexe_log, "SR   : %.8" PRIx32 "  ",
+	  fprintf (runtime.sim.fexe_log, "SR   : %.8" PRIx64 "  ",
 		   cpu_state.sprs[SPR_SR]);
 	  fprintf (runtime.sim.fexe_log, "EPCR0: %" PRIxADDR "  ",
 		   cpu_state.sprs[SPR_EPCR_BASE]);
 	  fprintf (runtime.sim.fexe_log, "EEAR0: %" PRIxADDR "  ",
 		   cpu_state.sprs[SPR_EEAR_BASE]);
-	  fprintf (runtime.sim.fexe_log, "ESR0 : %.8" PRIx32 "\n",
+	  fprintf (runtime.sim.fexe_log, "ESR0 : %.8" PRIx64 "\n",
 		   cpu_state.sprs[SPR_ESR_BASE]);
 	  break;
 

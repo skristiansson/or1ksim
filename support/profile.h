@@ -37,6 +37,7 @@
 #define MPROF_8        8
 #define MPROF_16       16
 #define MPROF_32       32
+#define MPROF_64       64
 
 /* Adds a new entry to the memory profile file */
 void mprofile (oraddr_t memaddr, unsigned char type);

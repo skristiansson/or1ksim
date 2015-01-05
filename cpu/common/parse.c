@@ -125,7 +125,7 @@ translate (oraddr_t  laddr,
 	{
 	  /* Page modified */
 	  set_direct32 (transl_table + i + 8, -2, 0, 0);
-	  PRINTFQ ("found paddr=%" PRIx32 "\n",
+	  PRINTFQ ("found paddr=%04" PRIx64 "\n",
 		  eval_direct32 (transl_table + i + 4, 0, 0) |
 		  (laddr & (PAGE_SIZE - 1)));
 	  return  (oraddr_t) eval_direct32 (transl_table + i + 4, 0, 0) |
@@ -149,7 +149,7 @@ translate (oraddr_t  laddr,
 	  PRINTFQ ("newly allocated .ppn=%" PRIxADDR "\n", transl_table + i + 4);
 	  PRINTFQ ("newly allocated ofs=%" PRIxADDR "\n",
 		  (laddr & (PAGE_SIZE - 1)));
-	  PRINTFQ ("newly allocated paddr=%" PRIx32 "\n",
+	  PRINTFQ ("newly allocated paddr=%" PRIxADDR "\n",
 		  eval_direct32 (transl_table + i + 4, 0,
 				 0) | (laddr & (PAGE_SIZE - 1)));
 	  return  (oraddr_t) eval_direct32 (transl_table + i + 4, 0, 0) |

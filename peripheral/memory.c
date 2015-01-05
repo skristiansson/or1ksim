@@ -68,10 +68,20 @@ struct mem_config
   } type;
 };
 
+static uint64_t
+simmem_read64 (oraddr_t addr, void *dat)
+{
+  return *(uint64_t *) (dat + addr);
+}
+
 static uint32_t
 simmem_read32 (oraddr_t addr, void *dat)
 {
+#ifdef WORDS_BIGENDIAN
   return *(uint32_t *) (dat + addr);
+#else
+  return *(uint32_t *) (dat + ((addr & ~ADDR_C (7)) | (4 - (addr & 7))));
+#endif
 }
 
 static uint16_t
@@ -80,7 +90,7 @@ simmem_read16 (oraddr_t addr, void *dat)
 #ifdef WORDS_BIGENDIAN
   return *(uint16_t *) (dat + addr);
 #else
-  return *(uint16_t *) (dat + (addr ^ 2));
+  return *(uint16_t *) (dat + ((addr & ~ADDR_C (7)) | (6 - (addr & 7))));
 #endif
 }
 
@@ -90,14 +100,24 @@ simmem_read8 (oraddr_t addr, void *dat)
 #ifdef WORDS_BIGENDIAN
   return *(uint8_t *) (dat + addr);
 #else
-  return *(uint8_t *) (dat + ((addr & ~ADDR_C (3)) | (3 - (addr & 3))));
+  return *(uint8_t *) (dat + ((addr & ~ADDR_C (7)) | (7 - (addr & 7))));
 #endif
+}
+
+static void
+simmem_write64 (oraddr_t addr, uint64_t value, void *dat)
+{
+  *(uint64_t *) (dat + addr) = value;
 }
 
 static void
 simmem_write32 (oraddr_t addr, uint32_t value, void *dat)
 {
+#ifdef WORDS_BIGENDIAN
   *(uint32_t *) (dat + addr) = value;
+#else
+  *(uint32_t *) (dat + ((addr & ~ADDR_C (7)) | (4 - (addr & 7)))) = value;
+#endif
 }
 
 static void
@@ -106,7 +126,7 @@ simmem_write16 (oraddr_t addr, uint16_t value, void *dat)
 #ifdef WORDS_BIGENDIAN
   *(uint16_t *) (dat + addr) = value;
 #else
-  *(uint16_t *) (dat + (addr ^ 2)) = value;
+  *(uint16_t *) (dat + ((addr & ~ADDR_C (7)) | (6 - (addr & 7)))) = value;
 #endif
 }
 
@@ -116,8 +136,18 @@ simmem_write8 (oraddr_t addr, uint8_t value, void *dat)
 #ifdef WORDS_BIGENDIAN
   *(uint8_t *) (dat + addr) = value;
 #else
-  *(uint8_t *) (dat + ((addr & ~ADDR_C (3)) | (3 - (addr & 3)))) = value;
+  *(uint8_t *) (dat + ((addr & ~ADDR_C (7)) | (7 - (addr & 7)))) = value;
 #endif
+}
+
+static uint64_t
+simmem_read_zero64 (oraddr_t addr, void *dat)
+{
+  if (config.sim.verbose)
+    fprintf (stderr,
+	     "WARNING: 64-bit memory read from non-read memory area 0x%"
+	     PRIxADDR ".\n", addr);
+  return 0;
 }
 
 static uint32_t
@@ -148,6 +178,15 @@ simmem_read_zero8 (oraddr_t addr, void *dat)
 	     "WARNING: 8-bit memory read from non-read memory area 0x%"
 	     PRIxADDR ".\n", addr);
   return 0;
+}
+
+static void
+simmem_write_null64 (oraddr_t addr, uint64_t value, void *dat)
+{
+  if (config.sim.verbose)
+    fprintf (stderr,
+	     "WARNING: 64-bit memory write to 0x%" PRIxADDR ", non-write "
+	     "memory area (value 0x%" PRIx64 ").\n", addr, value);
 }
 
 static void
@@ -435,12 +474,14 @@ memory_sec_end (void *dat)
 
   if (mem->delayr > 0)
     {
+      ops.readfunc64 = simmem_read64;
       ops.readfunc32 = simmem_read32;
       ops.readfunc16 = simmem_read16;
       ops.readfunc8 = simmem_read8;
     }
   else
     {
+      ops.readfunc64 = simmem_read_zero64;
       ops.readfunc32 = simmem_read_zero32;
       ops.readfunc16 = simmem_read_zero16;
       ops.readfunc8 = simmem_read_zero8;
@@ -448,12 +489,14 @@ memory_sec_end (void *dat)
 
   if (mem->delayw > 0)
     {
+      ops.writefunc64 = simmem_write64;
       ops.writefunc32 = simmem_write32;
       ops.writefunc16 = simmem_write16;
       ops.writefunc8 = simmem_write8;
     }
   else
     {
+      ops.writefunc64 = simmem_write_null64;
       ops.writefunc32 = simmem_write_null32;
       ops.writefunc16 = simmem_write_null16;
       ops.writefunc8 = simmem_write_null8;
@@ -461,13 +504,17 @@ memory_sec_end (void *dat)
 
   ops.writeprog8 = simmem_write8;
   ops.writeprog32 = simmem_write32;
+  ops.writeprog64 = simmem_write64;
   ops.writeprog8_dat = mem->mem;
   ops.writeprog32_dat = mem->mem;
+  ops.writeprog64_dat = mem->mem;
 
+  ops.read_dat64 = mem->mem;
   ops.read_dat32 = mem->mem;
   ops.read_dat16 = mem->mem;
   ops.read_dat8 = mem->mem;
 
+  ops.write_dat64 = mem->mem;
   ops.write_dat32 = mem->mem;
   ops.write_dat16 = mem->mem;
   ops.write_dat8 = mem->mem;

@@ -33,18 +33,18 @@
 /*! Index of the link register */
 #define LINK_REGNO     9
 
-/* Conversion macros */
-#define ADDR_C(c)  UINT32_C(c)
-#define REG_C(c)   UINT32_C(c)
+/* Conversion macros */ // PTB tries 64-bit
+#define ADDR_C(c)  UINT64_C(c)
+#define REG_C(c)   UINT64_C(c)
 
-/* Strings for printing OpenRISC types */
-#define PRIxADDR  "08" PRIx32	/*!< print an openrisc address in hex */
-#define PRIxREG   "08" PRIx32	/*!< print an openrisc register in hex */
-#define PRIdREG   PRId32	/*!< print an openrisc register in decimals */
+/* Strings for printing OpenRISC types */ // PTB tries 64-bit
+#define PRIxADDR  "016" PRIx64	/*!< print an openrisc address in hex */
+#define PRIxREG   "016" PRIx64	/*!< print an openrisc register in hex */
+#define PRIdREG   PRId64	/*!< print an openrisc register in decimals */
 
-/* Basic types for openrisc */
-typedef uint32_t  oraddr_t;	/*!< Address as addressed by openrisc */
-typedef uint32_t  uorreg_t;	/*!< An unsigned register of openrisc */
-typedef int32_t   orreg_t;	/*!< A signed register of openrisc */
+/* Basic types for openrisc */  // PTB tries 64-bit
+typedef uint64_t  oraddr_t;	/*!< Address as addressed by openrisc */
+typedef uint64_t  uorreg_t;	/*!< An unsigned register of openrisc */
+typedef int64_t   orreg_t;	/*!< A signed register of openrisc */
 
 #endif /* ARCH__H */

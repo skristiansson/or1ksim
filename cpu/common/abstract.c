@@ -68,15 +68,19 @@ static struct dev_memarea *mc_area = NULL;
 static oraddr_t cur_vadd;
 
 /* Forward declarations */
+static uint64_t eval_mem_64_inv (oraddr_t, void *);
 static uint32_t eval_mem_32_inv (oraddr_t, void *);
 static uint16_t eval_mem_16_inv (oraddr_t, void *);
 static uint8_t  eval_mem_8_inv (oraddr_t, void *);
+static uint64_t eval_mem_64_inv_direct (oraddr_t, void *);
 static uint32_t eval_mem_32_inv_direct (oraddr_t, void *);
 static uint16_t eval_mem_16_inv_direct (oraddr_t, void *);
 static uint8_t  eval_mem_8_inv_direct (oraddr_t, void *);
+static void     set_mem_64_inv (oraddr_t, uint64_t, void *);
 static void     set_mem_32_inv (oraddr_t, uint32_t, void *);
 static void     set_mem_16_inv (oraddr_t, uint16_t, void *);
 static void     set_mem_8_inv (oraddr_t, uint8_t, void *);
+static void     set_mem_64_inv_direct (oraddr_t, uint64_t, void *);
 static void     set_mem_32_inv_direct (oraddr_t, uint32_t, void *);
 static void     set_mem_16_inv_direct (oraddr_t, uint16_t, void *);
 static void     set_mem_8_inv_direct (oraddr_t, uint8_t, void *);
@@ -170,6 +174,12 @@ reg_mem_area (oraddr_t addr, uint32_t size, unsigned mc_dev,
   memcpy (&mem->ops, ops, sizeof (struct mem_ops));
   memcpy (&mem->direct_ops, ops, sizeof (struct mem_ops));
 
+  if (!ops->readfunc64)
+    {
+      mem->ops.readfunc64 = eval_mem_64_inv;
+      mem->direct_ops.readfunc64 = eval_mem_64_inv_direct;
+      mem->direct_ops.read_dat64 = mem;
+    }
   if (!ops->readfunc32)
     {
       mem->ops.readfunc32 = eval_mem_32_inv;
@@ -189,6 +199,12 @@ reg_mem_area (oraddr_t addr, uint32_t size, unsigned mc_dev,
       mem->direct_ops.read_dat8 = mem;
     }
 
+  if (!ops->writefunc64)
+    {
+      mem->ops.writefunc64 = set_mem_64_inv;
+      mem->direct_ops.writefunc64 = set_mem_64_inv_direct;
+      mem->direct_ops.write_dat64 = mem;
+    }
   if (!ops->writefunc32)
     {
       mem->ops.writefunc32 = set_mem_32_inv;
@@ -303,6 +319,13 @@ eval_mem_32_inv (oraddr_t memaddr, void *dat)
   return 0;
 }
 
+static uint64_t
+eval_mem_64_inv (oraddr_t memaddr, void *dat)
+{
+  except_handle (EXCEPT_BUSERR, cur_vadd);
+  return 0;
+}
+
 static void
 set_mem_8_inv (oraddr_t memaddr, uint8_t val, void *dat)
 {
@@ -317,6 +340,12 @@ set_mem_16_inv (oraddr_t memaddr, uint16_t val, void *dat)
 
 static void
 set_mem_32_inv (oraddr_t memaddr, uint32_t val, void *dat)
+{
+  except_handle (EXCEPT_BUSERR, cur_vadd);
+}
+
+static void
+set_mem_64_inv (oraddr_t memaddr, uint64_t val, void *dat)
 {
   except_handle (EXCEPT_BUSERR, cur_vadd);
 }
@@ -351,6 +380,16 @@ eval_mem_32_inv_direct (oraddr_t memaddr, void *dat)
   return 0;
 }
 
+uint64_t
+eval_mem_64_inv_direct (oraddr_t memaddr, void *dat)
+{
+  struct dev_memarea *mem = dat;
+
+  PRINTF ("ERROR: Invalid 64-bit direct read from memory %" PRIxADDR "\n",
+	  mem->addr_compare | memaddr);
+  return 0;
+}
+
 void
 set_mem_8_inv_direct (oraddr_t memaddr, uint8_t val, void *dat)
 {
@@ -376,6 +415,40 @@ set_mem_32_inv_direct (oraddr_t memaddr, uint32_t val, void *dat)
 
   PRINTF ("ERROR: Invalid 32-bit direct write to memory %" PRIxADDR "\n",
 	  mem->addr_compare | memaddr);
+}
+
+void
+set_mem_64_inv_direct (oraddr_t memaddr, uint64_t val, void *dat)
+{
+  struct dev_memarea *mem = dat;
+
+  PRINTF ("ERROR: Invalid 64-bit direct write to memory %" PRIxADDR "\n",
+	  mem->addr_compare | memaddr);
+}
+
+uint64_t
+evalsim_mem64 (oraddr_t memaddr, oraddr_t vaddr)
+{
+  struct dev_memarea *mem;
+
+  if ((mem = verify_memoryarea (memaddr)))
+    {
+      runtime.sim.mem_cycles += mem->ops.delayr;
+      return mem->ops.readfunc64 (memaddr & mem->size_mask,
+				  mem->ops.read_dat64);
+    }
+  else
+    {
+      if (config.sim.report_mem_errs)
+	{
+	  PRINTF ("EXCEPTION: read out of memory (64-bit access to %" PRIxADDR
+		  ")\n", memaddr);
+	}
+      
+      except_handle (EXCEPT_BUSERR, vaddr);
+    }
+
+  return 0;
 }
 
 /* For cpu accesses
@@ -468,6 +541,42 @@ evalsim_mem8 (oraddr_t memaddr, oraddr_t vaddr)
   return 0;
 }
 
+uint64_t
+eval_mem64 (oraddr_t memaddr, int *breakpoint)
+{
+  uint64_t temp;
+  oraddr_t phys_memaddr;
+
+  if (config.sim.mprofile)
+    mprofile (memaddr, MPROF_64 | MPROF_READ);
+
+  if (memaddr & 7)
+    {
+      except_handle (EXCEPT_ALIGN, memaddr);
+      return 0;
+    }
+
+  phys_memaddr = dmmu_translate (memaddr, 0);
+  if (except_pending)
+    return 0;
+
+  if (config.pcu.enabled)
+    pcu_count_event(SPR_PCMR_LA);
+
+  if (config.debug.enabled)
+    *breakpoint += check_debug_unit (DebugLoadAddress, memaddr);
+
+  if (config.dc.enabled)
+    temp = dc_simulate_read (phys_memaddr, memaddr, 8);
+  else
+    temp = evalsim_mem64 (phys_memaddr, memaddr);
+
+  if (config.debug.enabled)
+    *breakpoint += check_debug_unit (DebugLoadData, temp);
+
+  return temp;
+}
+
 /* Returns 32-bit values from mem array. Big endian version.
  *
  * STATISTICS OK (only used for cpu_access, that is architectural access)
@@ -507,6 +616,40 @@ eval_mem32 (oraddr_t memaddr, int *breakpoint)
 
   return temp;
 }
+
+uint64_t
+eval_direct64 (oraddr_t memaddr, int through_mmu, int through_dc)
+{
+  oraddr_t phys_memaddr;
+  struct dev_memarea *mem;
+
+  if (memaddr & 7)
+    {
+      PRINTF ("%s:%d %s(): ERR unaligned access\n", __FILE__, __LINE__,
+	      __FUNCTION__);
+      return 0;
+    }
+
+  phys_memaddr = memaddr;
+
+  if (through_mmu)
+    phys_memaddr = peek_into_dtlb (memaddr, 0, through_dc);
+
+  if (through_dc)
+    return dc_simulate_read (phys_memaddr, memaddr, 8);
+  else
+    {
+      if ((mem = verify_memoryarea (phys_memaddr)))
+	return mem->direct_ops.readfunc64 (phys_memaddr & mem->size_mask,
+					   mem->direct_ops.read_dat64);
+      else
+	fprintf (stderr, "ERR: 64-bit read out of memory area: %" PRIxADDR
+		 " (physical: %" PRIxADDR ")\n", memaddr, phys_memaddr);
+    }
+
+  return 0;
+}
+
 
 /* for simulator accesses, the ones that cpu wouldn't do
  *
@@ -721,6 +864,30 @@ eval_direct8 (oraddr_t memaddr, int through_mmu, int through_dc)
   return 0;
 }
 
+void
+setsim_mem64 (oraddr_t memaddr, oraddr_t vaddr, uint64_t value)
+{
+  struct dev_memarea *mem;
+
+  if ((mem = verify_memoryarea (memaddr)))
+    {
+      cur_vadd = vaddr;
+      runtime.sim.mem_cycles += mem->ops.delayw;
+      mem->ops.writefunc64 (memaddr & mem->size_mask, value,
+			    mem->ops.write_dat64);
+    }
+  else
+    {
+      if (config.sim.report_mem_errs)
+	{
+	  PRINTF ("EXCEPTION: write out of memory (64-bit access to %" PRIxADDR
+		  ")\n", memaddr);
+	}
+
+      except_handle (EXCEPT_BUSERR, vaddr);
+    }
+}
+
 /* For cpu accesses
  *
  * NOTE: This function _is_ only called from set_mem32 below and
@@ -808,6 +975,48 @@ setsim_mem8 (oraddr_t memaddr, oraddr_t vaddr, uint8_t value)
     }
 }
 
+void
+set_mem64 (oraddr_t memaddr, uint64_t value, int *breakpoint)
+{
+  oraddr_t phys_memaddr;
+
+  if (config.sim.mprofile)
+    mprofile (memaddr, MPROF_64 | MPROF_WRITE);
+
+  if (memaddr & 7)
+    {
+      except_handle (EXCEPT_ALIGN, memaddr);
+      return;
+    }
+
+  phys_memaddr = dmmu_translate (memaddr, 1);;
+
+  if ((phys_memaddr & ~7) == cpu_state.loadlock_addr)
+    cpu_state.loadlock_active = 0;
+
+  /* If we produced exception don't set anything */
+  if (except_pending)
+    return;
+
+  if (config.pcu.enabled)
+    pcu_count_event(SPR_PCMR_SA);
+
+  if (config.debug.enabled)
+    {
+      *breakpoint += check_debug_unit (DebugStoreAddress, memaddr);	/* 28/05/01 CZ */
+      *breakpoint += check_debug_unit (DebugStoreData, value);
+    }
+
+  if (config.dc.enabled)
+    dc_simulate_write (phys_memaddr, memaddr, value, 8);
+  else
+    setsim_mem64 (phys_memaddr, memaddr, value);
+
+  if (cur_area && cur_area->log)
+    fprintf (cur_area->log, "[%" PRIxADDR "] -> write %016" PRIx64 "\n",
+	     memaddr, value);
+}
+
 /* Set mem, 32-bit. Big endian version. 
  *
  * STATISTICS OK. (the only suspicious usage is in sim-cmd.c,
@@ -856,6 +1065,47 @@ set_mem32 (oraddr_t memaddr, uint32_t value, int *breakpoint)
     fprintf (cur_area->log, "[%" PRIxADDR "] -> write %08" PRIx32 "\n",
 	     memaddr, value);
 }
+
+void
+set_direct64 (oraddr_t memaddr, uint64_t value, int through_mmu,
+	      int through_dc)
+{
+  oraddr_t phys_memaddr;
+  struct dev_memarea *mem;
+
+  if (memaddr & 7)
+    {
+      PRINTF ("%s:%d %s(): ERR unaligned access\n", __FILE__, __LINE__,
+	      __FUNCTION__);
+      return;
+    }
+
+  phys_memaddr = memaddr;
+
+  if (through_mmu)
+    {
+      /* 0 - no write access, we do not want a DPF exception do we ;)
+       */
+      phys_memaddr = peek_into_dtlb (memaddr, 1, through_dc);
+    }
+
+  if (through_dc)
+    dc_simulate_write (memaddr, memaddr, value, 8);
+  else
+    {
+      if ((mem = verify_memoryarea (phys_memaddr)))
+	mem->direct_ops.writefunc64 (phys_memaddr & mem->size_mask, value,
+				     mem->direct_ops.write_dat64);
+      else
+	fprintf (stderr, "ERR: 64-bit write out of memory area: %" PRIxADDR
+		" (physical: %" PRIxADDR ")\n", memaddr, phys_memaddr);
+    }
+
+  if (cur_area && cur_area->log)
+    fprintf (cur_area->log, "[%" PRIxADDR "] -> DIRECT write %016" PRIx64 "\n",
+	     memaddr, value);
+}
+
 
 /* 
  * STATISTICS NOT OK.
@@ -1058,6 +1308,27 @@ set_direct8 (oraddr_t memaddr, uint8_t value, int through_mmu, int through_dc)
   if (cur_area && cur_area->log)
     fprintf (cur_area->log, "[%" PRIxADDR "] -> DIRECT write %02" PRIx8 "\n",
 	     memaddr, value);
+}
+
+void
+set_program64 (oraddr_t memaddr, uint64_t value)
+{
+  struct dev_memarea *mem;
+
+  if (memaddr & 7)
+    {
+      PRINTF ("%s(): ERR unaligned 64-bit program write\n", __FUNCTION__);
+      return;
+    }
+
+  if ((mem = verify_memoryarea (memaddr)))
+    {
+      mem->ops.writeprog64 (memaddr & mem->size_mask, value,
+			    mem->ops.writeprog64_dat);
+    }
+  else
+    PRINTF ("ERR: 64-bit program load out of memory area: %" PRIxADDR "\n",
+	    memaddr);
 }
 
 
@@ -1288,7 +1559,7 @@ disassemble_instr (oraddr_t  phyaddr,
       /* Put either the register assignment, SPR value, or store */
       if (-1 != trace_dest_spr)
 	{
-	  PRINTF ("SPR[%04x]  = %08x", (trace_dest_spr | 
+	  PRINTF ("SPR[%04" PRIx64 "]  = %08" PRIx64, (trace_dest_spr | 
 					evalsim_reg (trace_dest_reg)), 
 		  cpu_state.sprs[(trace_dest_spr | 
 				  evalsim_reg (trace_dest_reg))]);
@@ -1314,16 +1585,20 @@ disassemble_instr (oraddr_t  phyaddr,
 	  switch (trace_store_width)
 	    {
 	    case 1:
-	      PRINTF ("[%" PRIxADDR "] = %02x      ", store_addr,
+	      PRINTF ("[%" PRIxADDR "] = %02" PRIx64 "      ", store_addr,
 		      store_val);
 	      break;
 		
 	    case 2:
-	      PRINTF ("[%" PRIxADDR "] = %04x    ", store_addr, store_val);
+	      PRINTF ("[%" PRIxADDR "] = %04" PRIx64 "    ", store_addr, store_val);
 	      break;
 		  
 	    case 4:
-	      PRINTF ("[%" PRIxADDR "] = %08x", store_addr, store_val);
+	      PRINTF ("[%" PRIxADDR "] = %08" PRIx64, store_addr, store_val);
+	      break;
+		  
+	    case 8:
+	      PRINTF ("[%" PRIxADDR "] = %016" PRIx64, store_addr, store_val);
 	      break;
 		  
 	    default:

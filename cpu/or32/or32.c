@@ -313,8 +313,8 @@ CONST struct or32_opcode or1ksim_or32_opcodes[] = {
   {"l.cust4", "", "01 0xF  ----- ----- ---- ---- ---- ----",
    EF (l_cust4), 0, it_unknown},
 
-  {"l.ld", "rD,I(rA)", "10 0x0  DDDDD AAAAA IIII IIII IIII IIII", EFI,
-   0, it_load},
+  {"l.ld",  "rD,I(rA)", "10 0x0  DDDDD AAAAA IIII IIII IIII IIII",
+   EF (l_ld),  0, it_load},
   {"l.lwz", "rD,I(rA)", "10 0x1  DDDDD AAAAA IIII IIII IIII IIII",
    EF (l_lwz), 0, it_load},
   {"l.lws", "rD,I(rA)", "10 0x2  DDDDD AAAAA IIII IIII IIII IIII",
@@ -448,8 +448,8 @@ CONST struct or32_opcode or1ksim_or32_opcodes[] = {
 
   {"l.swa", "I(rA),rB", "11 0x3  IIIII AAAAA BBBB BIII IIII IIII",
    EF (l_swa), 0, it_store},
-  {"l.sd", "I(rA),rB", "11 0x4  IIIII AAAAA BBBB BIII IIII IIII", EFI,
-   0, it_store},
+  {"l.sd", "I(rA),rB", "11 0x4  IIIII AAAAA BBBB BIII IIII IIII",
+   EF (l_sd), 0, it_store},
   {"l.sw", "I(rA),rB", "11 0x5  IIIII AAAAA BBBB BIII IIII IIII",
    EF (l_sw), 0, it_store},
   {"l.sb", "I(rA),rB", "11 0x6  IIIII AAAAA BBBB BIII IIII IIII",

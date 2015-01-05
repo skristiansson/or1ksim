@@ -182,7 +182,7 @@ peek_into_dtlb (oraddr_t virtaddr, int write_access, int through_dc)
       !(cpu_state.sprs[SPR_UPR] & SPR_UPR_DMP))
     {
       if (through_dc)
-	data_ci = (virtaddr >= 0x80000000);
+	data_ci = (virtaddr >= 0x8000000000000000ULL);
       return virtaddr;
     }
 

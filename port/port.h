@@ -48,6 +48,16 @@ int isblank(int c);
 
 /* Substitute all the inttypes fields that are missing */
 
+#ifndef PRIx64
+# if SIZEOF_INT == 8
+#  define PRIx64 "x"
+# elif SIZEOF_LONG == 8
+#  define PRIx64 "lx"
+# elif SIZEOF_LONG_LONG == 8
+#  define PRIx64 "llx"
+# endif
+#endif
+
 #ifndef PRIx32
 # if SIZEOF_INT == 4
 #  define PRIx32 "x"

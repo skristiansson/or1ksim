@@ -889,7 +889,7 @@ debug_get_mem (oraddr_t  address,
 /*---------------------------------------------------------------------------*/
 static int
 debug_set_mem (oraddr_t  address,
-	       uint32_t  data)
+	       uorreg_t  data)
 {
   int  err = ERR_NONE;
 

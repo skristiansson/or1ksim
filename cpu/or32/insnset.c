@@ -38,12 +38,12 @@ INSTRUCTION (l_add) {
 
   /* Set overflow if two negative values gave a positive sum, or if two
      positive values gave a negative sum. Otherwise clear it */
-  if ((((long int) temp2 <  0) && 
-       ((long int) temp3 <  0) &&
-       ((long int) temp1 >= 0)) ||
-      (((long int) temp2 >= 0) && 
-       ((long int) temp3 >= 0) &&
-       ((long int) temp1 <  0)))
+  if (((temp2 <  0) && 
+       (temp3 <  0) &&
+       (temp1 >= 0)) ||
+      ((temp2 >= 0) && 
+       (temp3 >= 0) &&
+       (temp1 <  0)))
     {
       cpu_state.sprs[SPR_SR] |= SPR_SR_OV;
     }
@@ -95,9 +95,9 @@ INSTRUCTION (l_add) {
     
   }
 
-  temp4 = temp1;
-  if (temp4 == temp1)
-    or1k_mstats.byteadd++;
+  temp4 = (int8_t)temp1;
+  if (temp4 == temp1) 
+    or1k_mstats.byteadd++; // temp1 is just a byte long, with 0s or fs high
 }
 INSTRUCTION (l_addc) {
   orreg_t temp1, temp2, temp3;
@@ -119,12 +119,12 @@ INSTRUCTION (l_addc) {
      positive values gave a negative sum. Otherwise clear it. There are no
      corner cases with the extra bit carried in (unlike the carry flag - see
      below). */
-  if ((((long int) temp2 <  0) && 
-       ((long int) temp3 <  0) &&
-       ((long int) temp1 >= 0)) ||
-      (((long int) temp2 >= 0) && 
-       ((long int) temp3 >= 0) &&
-       ((long int) temp1 <  0)))
+  if ((((int32_t) temp2 <  0) && 
+       ((int32_t) temp3 <  0) &&
+       ((int32_t) temp1 >= 0)) ||
+      (((int32_t) temp2 >= 0) && 
+       ((int32_t) temp3 >= 0) &&
+       ((int32_t) temp1 <  0)))
     {
       cpu_state.sprs[SPR_SR] |= SPR_SR_OV;
     }
@@ -179,9 +179,9 @@ INSTRUCTION (l_addc) {
     
   }
 
-  temp4 = temp1;
-  if (temp4 == temp1)
-    or1k_mstats.byteadd++;
+  temp4 = (int8_t)temp1;
+  if (temp4 == temp1) 
+    or1k_mstats.byteadd++; // temp1 is just a byte long
 }
 INSTRUCTION (l_swa) {
   int old_cyc = 0;
@@ -193,7 +193,7 @@ INSTRUCTION (l_swa) {
   if (cpu_state.loadlock_addr == dmmu_translate (PARAM0, 0)
       && cpu_state.loadlock_active) {
     swa_success = 1;
-    set_mem32(PARAM0, PARAM1, &breakpoint);
+    set_mem32(PARAM0, (uint32_t)PARAM1, &breakpoint);
     if (config.cpu.sbuf_len) {
       int t = runtime.sim.mem_cycles;
       runtime.sim.mem_cycles = old_cyc;
@@ -208,10 +208,20 @@ INSTRUCTION (l_swa) {
 
   cpu_state.loadlock_active = 0;
 }
+INSTRUCTION (l_sd) {
+  int old_cyc = 0;
+
+  set_mem64(PARAM0, PARAM1, &breakpoint);
+  if (config.cpu.sbuf_len) {
+    int t = runtime.sim.mem_cycles;
+    runtime.sim.mem_cycles = old_cyc;
+    sbuf_store (t - old_cyc);
+  }
+}
 INSTRUCTION (l_sw) {
   int old_cyc = 0;
   if (config.cpu.sbuf_len) old_cyc = runtime.sim.mem_cycles;
-  set_mem32(PARAM0, PARAM1, &breakpoint);
+  set_mem32(PARAM0, (int32_t)PARAM1, &breakpoint);
   if (config.cpu.sbuf_len) {
     int t = runtime.sim.mem_cycles;
     runtime.sim.mem_cycles = old_cyc;
@@ -221,7 +231,7 @@ INSTRUCTION (l_sw) {
 INSTRUCTION (l_sb) {
   int old_cyc = 0;
   if (config.cpu.sbuf_len) old_cyc = runtime.sim.mem_cycles;
-  set_mem8(PARAM0, PARAM1, &breakpoint);
+  set_mem8(PARAM0, (int8_t)PARAM1, &breakpoint);
   if (config.cpu.sbuf_len) {
     int t = runtime.sim.mem_cycles;
     runtime.sim.mem_cycles = old_cyc;
@@ -231,12 +241,22 @@ INSTRUCTION (l_sb) {
 INSTRUCTION (l_sh) {
   int old_cyc = 0;
   if (config.cpu.sbuf_len) old_cyc = runtime.sim.mem_cycles;
-  set_mem16(PARAM0, PARAM1, &breakpoint);
+  set_mem16(PARAM0, (int16_t)PARAM1, &breakpoint);
   if (config.cpu.sbuf_len) {
     int t = runtime.sim.mem_cycles;
     runtime.sim.mem_cycles = old_cyc;
     sbuf_store (t - old_cyc);
   }
+}
+INSTRUCTION (l_ld) {
+  uint64_t val;
+  val = eval_mem64(PARAM1, &breakpoint);
+  cpu_state.loadlock_active = 1;
+  cpu_state.loadlock_addr = dmmu_translate (PARAM1, 0);
+  /* If eval operand produced exception don't set anything. JPB changed to
+     trigger on breakpoint, as well as except_pending (seemed to be a bug). */
+  if (!(except_pending || breakpoint))
+    SET_PARAM0(val);
 }
 INSTRUCTION (l_lwa) {
   uint32_t val;
@@ -251,7 +271,7 @@ INSTRUCTION (l_lwa) {
     SET_PARAM0(val);
 }
 INSTRUCTION (l_lws) {
-  uint32_t val;
+  int32_t val; // signed!
   if (config.cpu.sbuf_len) sbuf_load ();
   val = eval_mem32(PARAM1, &breakpoint);
   /* If eval operand produced exception don't set anything. JPB changed to
@@ -336,12 +356,12 @@ INSTRUCTION (l_sub) {
   /* Set overflow if a negative value minus a positive value gave a positive
      sum, or if a positive value minus a negative value gave a negative
      sum. Otherwise clear it */
-  if ((((long int) temp2 <  0) && 
-       ((long int) temp3 >= 0) &&
-       ((long int) temp1 >= 0)) ||
-      (((long int) temp2 >= 0) && 
-       ((long int) temp3 <  0) &&
-       ((long int) temp1 <  0)))
+  if (((temp2 <  0) && 
+       (temp3 >= 0) &&
+       (temp1 >= 0)) ||
+      ((temp2 >= 0) && 
+       (temp3 <  0) &&
+       (temp1 <  0)))
     {
       cpu_state.sprs[SPR_SR] |= SPR_SR_OV;
     }
@@ -396,8 +416,9 @@ INSTRUCTION (l_sub) {
 INSTRUCTION (l_mul) {
   orreg_t   temp0, temp1, temp2;
   LONGEST   ltemp0, ltemp1, ltemp2;
+  int ovf;
 
-  /* Args in 32-bit */
+  /* Args */
   temp2 = (orreg_t) PARAM2;
   temp1 = (orreg_t) PARAM1;
 
@@ -405,14 +426,20 @@ INSTRUCTION (l_mul) {
   ltemp1 = (LONGEST) temp1;
   ltemp2 = (LONGEST) temp2;
   ltemp0 = ltemp1 * ltemp2;
+  temp0  = (orreg_t) ltemp0;
+  /* We have 2's complement overflow, if the result is less than the smallest
+    possible 64-bit negative number, or greater than the largest possible
+    64-bit positive number. FIXME impossible */
+  ovf = ((ltemp0 < (LONGEST) INT64_MIN) || (ltemp0 > (LONGEST) INT64_MAX));
 
-  temp0  = (orreg_t) (ltemp0  & 0xffffffffLL);
   SET_PARAM0 (temp0);
 
   /* We have 2's complement overflow, if the result is less than the smallest
-     possible 32-bit negative number, or greater than the largest possible
-     32-bit positive number. */
-  if ((ltemp0 < (LONGEST) INT32_MIN) || (ltemp0 > (LONGEST) INT32_MAX))
+     possible 64-bit negative number, or greater than the largest possible
+     64-bit positive number. I think ovf=0 or ovf=-1 is usual, o/w it's an
+     overflow, but FIXME, as I'm just guessing about that.
+   */
+  if (ovf) // FIXME guesswork
     {
       cpu_state.sprs[SPR_SR] |= SPR_SR_OV;
     }
@@ -454,24 +481,26 @@ INSTRUCTION (l_mul) {
 INSTRUCTION (l_mulu) {
   uorreg_t   temp0, temp1, temp2;
   ULONGEST  ultemp0, ultemp1, ultemp2;
+  int ovf;
 
-  /* Args in 32-bit */
+  /* Args */
   temp2 = (uorreg_t) PARAM2;
   temp1 = (uorreg_t) PARAM1;
 
-  /* Compute initially in 64-bit */
-  ultemp1 = (ULONGEST) temp1 & 0xffffffffULL;
-  ultemp2 = (ULONGEST) temp2 & 0xffffffffULL;
+  ultemp1 = (ULONGEST) temp1;
+  ultemp2 = (ULONGEST) temp2;
   ultemp0 = ultemp1 * ultemp2;
 
-  temp0  = (uorreg_t) (ultemp0  & 0xffffffffULL);
+  temp0  = (orreg_t) ultemp0;
+
+  ovf = (ultemp0 > (ULONGEST) UINT64_MAX); // FIXME never happens!
   SET_PARAM0 (temp0);
 
   /* OV flag is not touched */
 
   /* We have 1's complement overflow, if the result is greater than the
-     largest possible 32-bit unsigned number. */
-  if (ultemp0 > (ULONGEST) UINT32_MAX)
+     largest possible 64-bit unsigned number. */
+  if (ovf != 0) // FIXME guesswork
     {
       cpu_state.sprs[SPR_SR] |= SPR_SR_CY;
     }
@@ -511,9 +540,9 @@ INSTRUCTION (l_div) {
   temp2 = (orreg_t) PARAM1;
  
   /* Check for divide by zero (sets carry) */
-  /* INT32_MIN / -1 should will also overflow */
+  /* INT64_MIN / -1 should will also overflow */
   if ((0 == temp3) ||
-      (0x80000000 == temp2 && 0xffffffff == temp3))
+      (0x8000000000000000LL == temp2 && -1 == temp3))
     {
       cpu_state.sprs[SPR_SR] |= SPR_SR_OV;
     }
@@ -621,7 +650,7 @@ INSTRUCTION (l_srl) {
 INSTRUCTION (l_ror) {
   uorreg_t temp1;
   temp1  = PARAM1 >> (PARAM2 & 0x1f);
-  temp1 |= PARAM1 << (32 - (PARAM2 & 0x1f));
+  temp1 |= PARAM1 << (64 - (PARAM2 & 0x1f));
   SET_PARAM0(temp1);
 }
 INSTRUCTION (l_bf) {
@@ -961,7 +990,7 @@ INSTRUCTION (l_mac) {
 
   /* current accumulator value as 64-bit signed int */
   acc = ((LONGEST)lo & 0xFFFFFFFFULL) | ((LONGEST)hi << 32);
-  /* compute 32x32-bit to 64-bit product */
+  /* compute bottom 64 bits of 64-bit product */
   prod = x * y;
   /* 64-bit addition */
   tmp = acc + prod;
@@ -1028,7 +1057,7 @@ INSTRUCTION (l_msb) {
 
   /* current accumulator value as 64-bit signed int */
   acc = ((LONGEST)lo & 0xFFFFFFFFULL) | ((LONGEST)hi << 32);
-  /* compute 32x32-bit to 64-bit product */
+  /* compute bottom 64 bits of 64-bit product */
   prod = x * y;
   /* 64-bit subtraction */
   tmp = acc - prod;
@@ -1085,11 +1114,15 @@ INSTRUCTION (l_msb) {
 
 }
 INSTRUCTION (l_macrc) {
-  orreg_t lo;
+  uorreg_t lo, hi, acc;
   /* No need for synchronization here -- all MAC instructions are 1 cycle long.  */
-  lo =  cpu_state.sprs[SPR_MACLO];
+  lo =  (uint32_t)cpu_state.sprs[SPR_MACLO];
+  hi =  (uint32_t)cpu_state.sprs[SPR_MACHI];
+  acc = (hi << 32) | lo;
+
   //PRINTF ("<%08x>\n", (unsigned long)l);
-  SET_PARAM0(lo);
+
+  SET_PARAM0(acc);
   cpu_state.sprs[SPR_MACLO] = 0;
   cpu_state.sprs[SPR_MACHI] = 0;
 }
@@ -1100,16 +1133,18 @@ INSTRUCTION (l_ff1) {
   SET_PARAM0(ffs(PARAM1));
 }
 INSTRUCTION (l_fl1) {
-  orreg_t t = (orreg_t)PARAM1;
+  uorreg_t t = (orreg_t)PARAM1, pos;
 
   /* Reverse the word and use ffs */
-  t = (((t & 0xaaaaaaaa) >> 1) | ((t & 0x55555555) << 1));
-  t = (((t & 0xcccccccc) >> 2) | ((t & 0x33333333) << 2));
-  t = (((t & 0xf0f0f0f0) >> 4) | ((t & 0x0f0f0f0f) << 4));
-  t = (((t & 0xff00ff00) >> 8) | ((t & 0x00ff00ff) << 8));
-  t = ffs ((t >> 16) | (t << 16));
+  t = (((t & 0xaaaaaaaaaaaaaaaaLL) >> 1) | ((t & 0x5555555555555555LL) << 1));
+  t = (((t & 0xccccccccccccccccLL) >> 2) | ((t & 0x3333333333333333LL) << 2));
+  t = (((t & 0xf0f0f0f0f0f0f0f0LL) >> 4) | ((t & 0x0f0f0f0f0f0f0f0fLL) << 4));
+  t = (((t & 0xff00ff00ff00ff00LL) >> 8) | ((t & 0x00ff00ff00ff00ffLL) << 8));
+  t = (((t & 0xffff0000ffff0000LL) >>16) | ((t & 0x0000ffff0000ffffLL) <<16));
+  pos = ffs ((t >> 32) | (t << 32));
+  pos = 0 == pos ? pos : 65 - pos;
   
-  SET_PARAM0 (0 == t ? t : 33 - t);
+  SET_PARAM0 (pos);
 }
 /******* Floating point instructions *******/
 /* Do calculation, and update FPCSR as required */

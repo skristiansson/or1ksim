@@ -49,11 +49,12 @@
 /*! Relative amount of time spent in refresh */
 #define REFRESH_DIVIDER	    20
 
-#define FB_CTRL            0x0000
-#define FB_BUFADDR         0x0004
-#define FB_CAMBUFADDR      0x0008
-#define FB_CAMPOSADDR      0x000c
-#define FB_PAL             0x0400
+// Addresses, hence 64 bit - although fb is 32 bit really FIXME
+#define FB_CTRL            0x0000LL
+#define FB_BUFADDR         0x0004LL
+#define FB_CAMBUFADDR      0x0008LL
+#define FB_CAMPOSADDR      0x000cLL
+#define FB_PAL             0x0400LL
 
 #define FB_WRAP (512*1024)
 
@@ -94,7 +95,7 @@ fb_write32 (oraddr_t addr, uint32_t value, void *dat)
       fb->ctrl = value;
       break;
     case FB_BUFADDR:
-      change_buf_addr (fb, value);
+      change_buf_addr (fb, value & 0xffffffffL); // always use 32 bit addrs
       break;
     case FB_CAMBUFADDR:
       fb->cam_addr = value;
@@ -119,7 +120,7 @@ fb_write32 (oraddr_t addr, uint32_t value, void *dat)
 }
 
 /* Read a register */
-static oraddr_t
+static uint32_t
 fb_read32 (oraddr_t addr, void *dat)
 {
   struct fb_state *fb = dat;
@@ -127,15 +128,15 @@ fb_read32 (oraddr_t addr, void *dat)
   switch (addr)
     {
     case FB_CTRL:
-      return (fb->ctrl & ~0xff000000) | (fb->
+      return (fb->ctrl & 0x00ffffff) | (fb->
 					 in_refresh ? 0x80000000 : 0) |
 	((unsigned long) (fb->refresh_count & 0x7f) << 24);
       break;
     case FB_BUFADDR:
-      return fb->addr;
+      return (uint32_t) fb->addr;
       break;
     case FB_CAMBUFADDR:
-      return fb->cam_addr;
+      return (uint32_t) fb->cam_addr;
       break;
     case FB_CAMPOSADDR:
       return fb->camera_pos;

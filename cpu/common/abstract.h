@@ -79,6 +79,7 @@ struct mem_ops
 {
 
   /* Read functions */
+  uint64_t    (*readfunc64) (oraddr_t, void *);
   uint32_t    (*readfunc32) (oraddr_t, void *);
   uint16_t    (*readfunc16) (oraddr_t, void *);
   uint8_t     (*readfunc8) (oraddr_t, void *);
@@ -87,8 +88,10 @@ struct mem_ops
   void       *read_dat8;
   void       *read_dat16;
   void       *read_dat32;
+  void       *read_dat64;
 
   /* Write functions */
+  void        (*writefunc64) (oraddr_t, uint64_t, void *);
   void        (*writefunc32) (oraddr_t, uint32_t, void *);
   void        (*writefunc16) (oraddr_t, uint16_t, void *);
   void        (*writefunc8) (oraddr_t, uint8_t, void *);
@@ -97,14 +100,17 @@ struct mem_ops
   void       *write_dat8;
   void       *write_dat16;
   void       *write_dat32;
+  void       *write_dat64;
 
   /* Program load function.  If you have unwritteable memory but you would like
    * it if a program would be loaded here, make sure to set this.  If this is
    * not set, then writefunc8 will be called to load the program */
+  void        (*writeprog64) (oraddr_t, uint64_t, void *);
   void        (*writeprog32) (oraddr_t, uint32_t, void *);
   void        (*writeprog8) (oraddr_t, uint8_t, void *);
 
   /* Program load functions' data */
+  void       *writeprog64_dat;
   void       *writeprog32_dat;
   void       *writeprog8_dat;
 
@@ -137,9 +143,11 @@ extern int                 insn_ci;
 extern struct hist_exec   *hist_exec_tail;
 
 /* Function prototypes for external use */
+extern uint64_t            eval_mem64 (oraddr_t memaddr, int *);
 extern uint32_t            eval_mem32 (oraddr_t memaddr, int *);
 extern uint16_t            eval_mem16 (oraddr_t memaddr, int *);
 extern uint8_t             eval_mem8 (oraddr_t memaddr, int *);
+extern void                set_mem64 (oraddr_t memaddr, uint64_t value, int *);
 extern void                set_mem32 (oraddr_t memaddr, uint32_t value, int *);
 extern void                set_mem16 (oraddr_t memaddr, uint16_t value, int *);
 extern void                set_mem8 (oraddr_t memaddr, uint8_t value, int *);
@@ -151,12 +159,14 @@ extern void                disassemble_memory (oraddr_t  from,
 extern void                disassemble_instr (oraddr_t  phyaddr,
 					      oraddr_t  virtaddr,
 					      uint32_t  insn);
+extern uint64_t            evalsim_mem64 (oraddr_t, oraddr_t);
 extern uint32_t            evalsim_mem32 (oraddr_t, oraddr_t);
 extern uint16_t            evalsim_mem16 (oraddr_t, oraddr_t);
 extern uint8_t             evalsim_mem8 (oraddr_t, oraddr_t);
+extern void                setsim_mem64 (oraddr_t, oraddr_t, uint64_t);
 extern void                setsim_mem32 (oraddr_t, oraddr_t, uint32_t);
 extern void                setsim_mem16 (oraddr_t, oraddr_t, uint16_t);
-extern void                setsim_mem8 (oraddr_t, oraddr_t, uint8_t);
+extern void                setsim_mem8  (oraddr_t, oraddr_t, uint8_t);
 extern void                done_memory_table ();
 extern void                memory_table_status (void);
 extern struct dev_memarea *reg_mem_area (oraddr_t        addr,
@@ -172,6 +182,9 @@ extern struct dev_memarea *verify_memoryarea (oraddr_t addr);
 extern char               *generate_time_pretty (char *dest,
 						 long  time_ps);
 extern uint32_t            eval_insn (oraddr_t, int *);
+extern uint64_t            eval_direct64 (oraddr_t  addr,
+					  int       through_mmu,
+					  int       through_dc);
 extern uint32_t            eval_direct32 (oraddr_t  addr,
 					  int       through_mmu,
 					  int       through_dc);
@@ -184,6 +197,9 @@ extern uint8_t             eval_direct8 (oraddr_t   memaddr,
 extern void                set_direct8 (oraddr_t, uint8_t, int, int);
 extern void                set_direct16 (oraddr_t, uint16_t, int, int);
 extern void                set_direct32 (oraddr_t, uint32_t, int, int);
+extern void                set_direct64 (oraddr_t, uint64_t, int, int);
+extern void                set_program64 (oraddr_t  memaddr,
+					  uint64_t  value);
 extern void                set_program32 (oraddr_t  memaddr,
 					  uint32_t  value);
 extern void                set_program8 (oraddr_t  memaddr,
